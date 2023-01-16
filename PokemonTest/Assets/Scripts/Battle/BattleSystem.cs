@@ -25,6 +25,18 @@ public class BattleSystem : MonoBehaviour
         StartCoroutine(SetupBattle());
     }
 
+    private void Update()
+    {
+        if (state == BattleState.PlayerAction)
+        {
+            HandleActionSelection();
+        }
+        else if (state == BattleState.PlayerMove)
+        {
+            HandleMoveSelection();
+        }
+    }
+
     public IEnumerator SetupBattle()
     {
         playerUnit.Setup();
@@ -40,36 +52,6 @@ public class BattleSystem : MonoBehaviour
 
         PlayerAction();
     }
-
-    private void PlayerAction()
-    {
-        state = BattleState.PlayerAction;
-        StartCoroutine(dialogBox.TypeDialog("Choose an action"));
-        dialogBox.EnableActionSelector(true);
-    }
-
-    private void PlayerMove()
-    {
-        state = BattleState.PlayerMove;
-        dialogBox.EnableActionSelector(false);
-        dialogBox.EnableDialogText(false);
-
-        dialogBox.EnableMoveSelector(true);
-    }
-
-    private void Update()
-    {
-        if(state == BattleState.PlayerAction)
-        {
-            HandleActionSelection();
-        }
-        else if(state == BattleState.PlayerMove)
-        {
-            HandleMoveSelection();
-        }
-    }
-
-
 
     private void HandleActionSelection()
     {
@@ -155,13 +137,68 @@ public class BattleSystem : MonoBehaviour
         }
     }
 
+    private void PlayerAction()
+    {
+        state = BattleState.PlayerAction;
+        StartCoroutine(dialogBox.TypeDialog("Choose an action"));
+        dialogBox.EnableActionSelector(true);
+    }
+
+    private void PlayerMove()
+    {
+        state = BattleState.PlayerMove;
+        dialogBox.EnableActionSelector(false);
+        dialogBox.EnableDialogText(false);
+
+        dialogBox.EnableMoveSelector(true);
+    }
+
     private IEnumerator PerformPlayerMove()
     {
+        state = BattleState.Busy;//so that playermove Locks into the move and performs action.
         Move move = playerUnit.PokemonUnit.Moves[currentMove];//collects data of current action move
         yield return dialogBox.TypeDialog
                                 ($"{playerUnit.PokemonUnit.PokemonBase.GetName()} used {move.MoveBase.GetName()}");//dialog for the move
 
         //delay, then deal damage
         yield return new WaitForSeconds(1f);
+
+        bool isFainted = enemyUnit.PokemonUnit.TakeDamage(move, playerUnit.PokemonUnit);//Enemy Unit takes DMG of a MOVE from player Unit.
+        yield return enemyHud.UpdateHP();
+
+        if(isFainted )
+        {
+            yield return dialogBox.TypeDialog($"{enemyUnit.PokemonUnit.PokemonBase.GetName()} Fainted" );
+        }
+        else//enemys turn to attack if pokemon didnt faint.
+        {
+            StartCoroutine(EnemyMove());
+        }
+    }
+
+    private IEnumerator EnemyMove()
+    {
+        state = BattleState.EnemyMove;
+
+        Move move = enemyUnit.PokemonUnit.GetRandomMove();//enemy chooses a random move
+
+        yield return dialogBox.TypeDialog
+                        ($"{enemyUnit.PokemonUnit.PokemonBase.GetName()} used {move.MoveBase.GetName()}");//dialog for the move
+
+        //delay, then deal damage
+        yield return new WaitForSeconds(1f);
+
+        bool isFainted = playerUnit.PokemonUnit.TakeDamage(move, enemyUnit.PokemonUnit);//Player Unit takes DMG of a MOVE from enemy Unit.
+        yield return playerHud.UpdateHP();
+
+        if (isFainted)
+        {
+            yield return dialogBox.TypeDialog($"{playerUnit.PokemonUnit.PokemonBase.GetName()} Fainted");
+        }
+        else//players turn again
+        {
+            PlayerAction();
+        }
+
     }
 }
